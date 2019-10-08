@@ -153,7 +153,7 @@ func main() {
 
 	if *file == "" {
 		log.Fatal("Missing payload file")
-
+		os.Exit(0)
 	}
 
 	if *passwd != "" && *domainKey != "" {
