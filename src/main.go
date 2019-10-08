@@ -82,7 +82,7 @@ func main() {
 package main
 
 import (
-	"DomainKeyedEnc/pkg/AntiSandbox"
+	"GoEncDomain/pkg/AntiSandbox"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
